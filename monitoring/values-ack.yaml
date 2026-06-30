@@ -1,0 +1,129 @@
+# ===================== Prometheus 时序存储主服务 =====================
+prometheus:
+  prometheusSpec:
+    # 阿里云国内完整镜像，覆盖默认quay.io
+    image:
+      registry: registry.aliyuncs.com
+      repository: ops/prometheus
+      tag: v2.54.1
+    # ESSD持久化云盘
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: alicloud-disk-essd
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    replicas: 2
+    # 调度：只允许跑ecs.g7.xlarge稳定机型，避开u1突发机
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.kubernetes.io/instance-type
+            operator: In
+            values: ["ecs.g7.xlarge"]
+    podAntiAffinity: hard
+    # 跨可用区打散，单zone故障不中断监控
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: prometheus
+
+# ===================== AlertManager 告警组件 =====================
+alertmanager:
+  alertmanagerSpec:
+    image:
+      registry: registry.aliyuncs.com
+      repository: ops/alertmanager
+      tag: v0.27.0
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: alicloud-disk-essd
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    replicas: 2
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.kubernetes.io/instance-type
+            operator: In
+            values: ["ecs.g7.xlarge"]
+    podAntiAffinity: hard
+
+# ===================== Grafana 可视化面板 =====================
+grafana:
+  image:
+    registry: registry.aliyuncs.com
+    repository: grafana/grafana
+    tag: 11.4.0
+  persistence:
+    enabled: true
+    storageClassName: alicloud-disk-essd
+    size: 20Gi
+  # Grafana面板插件初始化镜像
+  pluginsInit:
+    image:
+      registry: registry.aliyuncs.com
+      repository: ops/grafana-plugins
+      tag: latest
+  # Grafana也调度到g7机器
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["ecs.g7.xlarge"]
+
+# ===================== node-exporter 节点指标采集器（DaemonSet全节点跑） =====================
+prometheus-node-exporter:
+  image:
+    registry: registry.aliyuncs.com
+    repository: ops/node-exporter
+    tag: v1.8.2
+  # node-exporter需要采集所有节点硬件指标，不限制机型，u1/g7都部署
+  affinity: {}
+
+# ===================== kube-state-metrics K8s资源指标采集 =====================
+kube-state-metrics:
+  image:
+    registry: registry.aliyuncs.com
+    repository: ops/kube-state-metrics
+    tag: v2.14.0
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["ecs.g7.xlarge"]
+
+# ===================== Prometheus Operator 核心控制器 =====================
+prometheusOperator:
+  image:
+    registry: registry.aliyuncs.com
+    repository: ops/prometheus-operator
+    tag: v0.75.0
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["ecs.g7.xlarge"]
+  # 注释webhook证书生成Job，彻底解决CrashLoopBackOff无限重建Pod
+  # admissionWebhooks:
+  #   patch:
+  #     image:
+  #       registry: registry.cn-hangzhou.aliyuncs.com
+  #       repository: mirrors/kube-webhook-certgen
+  #       tag: 1.8.4

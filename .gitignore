@@ -1,0 +1,33 @@
+# 本地环境缓存
+.DS_Store
+*.swp
+*.swo
+*.tmp
+*.log
+.idea/
+.vscode/
+*.bak
+*.out
+
+# 密钥、敏感配置（绝对禁止上传）
+*secret
+*secret*.yaml
+*password*
+*.env
+.env.local
+*.pem
+*.crt
+*.key
+
+# helm缓存
+charts/
+*.tgz
+helm-cache/
+
+# kube本地缓存
+~/.kube/*
+.kubeconfig
+
+# 系统临时文件
+__pycache__/
+*.pyc
